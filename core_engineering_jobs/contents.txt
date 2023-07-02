@@ -1,1 +1,6 @@
+The link to the newsletter article: https://thedatavoyage.substack.com/p/the-pitfalls-of-core-engineering
 
+core_jobs_gate.R: The R code for plots.
+average_salary.jpeg: Average salary per month for freshers.
+listed_jobs.jpeg: The number of listed jobs for different streams on Indeed.
+students_gate.jpeg: The number of students appearing for GATE per year.
