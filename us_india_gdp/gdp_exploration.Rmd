@@ -1,0 +1,292 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+#install.packages("rvest")
+library(rvest)
+library(tidyverse)
+library(janitor)
+library(ggthemes)
+library(ggrepel)
+```
+
+
+```{r}
+url <- "https://en.wikipedia.org/wiki/List_of_states_and_union_territories_of_India_by_population"
+webpage <- read_html(url)
+table <- html_table(webpage, fill = TRUE)
+
+```
+
+```{r}
+table[[2]] %>%
+  clean_names() %>%
+  select(state_name = state_or_union_territory,
+         population = x2023_populationestimate_20) %>%
+  slice(-1) -> india_pop
+
+india_pop
+```
+```{r}
+india_pop %>%
+  summarise(min_pop = min(population),
+            max_pop = max(population))
+```
+
+
+
+```{r}
+url <- "https://en.wikipedia.org/wiki/List_of_Indian_states_and_union_territories_by_GDP_per_capita"
+webpage <- read_html(url)
+table <- html_table(webpage, fill = TRUE)
+
+```
+
+
+```{r}
+
+table[[2]] %>%
+  clean_names() %>%
+  select(state_name = state_union_territory,
+         nsdp_per_capita = x2022_23) -> india_gdp_per_cap
+
+india_gdp_per_cap
+```
+
+
+```{r}
+library(dplyr)
+
+scale_to_range <- function(x, min, max) {
+  scaled <- (x - min(x, na.rm = TRUE)) / (max(x, na.rm = TRUE) - min(x, na.rm = TRUE))
+  scaled * (max - min) + min
+}
+
+
+```
+
+
+
+```{r}
+india_gdp_per_cap %>%
+  left_join(india_pop) %>%
+  filter(!is.na(population)) %>%
+  mutate(population = gsub("\\[b\\]", "", population)) %>%
+  mutate(
+    nsdp_per_capita = as.numeric(gsub(",", "", nsdp_per_capita)),
+    population = as.numeric(gsub(",", "", population))
+  ) %>%
+  mutate(
+    n_nsdp = scale_to_range(nsdp_per_capita, 1, 10),
+    n_population = scale_to_range(population, 1, 10)
+  ) %>%
+  arrange(population)-> india_gdp_pop
+
+india_gdp_pop
+```
+
+```{r}
+str(india_gdp_pop)
+```
+
+```{r}
+cor(india_gdp_pop$nsdp_per_capita, india_gdp_pop$population)
+```
+
+```{r}
+
+cor(log10(india_gdp_pop$nsdp_per_capita), log10(india_gdp_pop$population))
+
+```
+
+
+
+```{r fig.height=9, fig.width=12}
+india_gdp_pop %>% 
+  # mutate(nsdp_per_capita = nsdp_per_capita/1000,
+  #        population = population/100000) %>%
+  ggplot(aes(x = nsdp_per_capita, y = population)) +
+  geom_point() +
+  geom_label_repel(aes(label = state_name), max.overlaps = 30) + labs(
+    title = 'Population vs NSDP per capita for Indian States',
+    caption = 'datasignal.substack.com',
+    x = "NSDP per capita of Indian States in Thousands",
+    y = "Population of Indian states in Lakhs"
+  ) + 
+  # xlab("NSDP per capita of Indian States in Thousands") +
+  # ylab("Population of Indian states in Lakhs") +
+  theme_economist()
+```
+
+```{r fig.height=9, fig.width=12}
+india_gdp_pop %>% 
+  ggplot(aes(x = nsdp_per_capita, y = log10(population))) +
+  geom_point() +
+  geom_label_repel(aes(label = state_name), max.overlaps = 30) + theme_bw()
+```
+
+```{r}
+url <- "https://en.wikipedia.org/wiki/List_of_U.S._states_and_territories_by_GDP"
+webpage <- read_html(url)
+table_us_gdp <- html_table(webpage, fill = TRUE)
+```
+
+```{r}
+table_us_gdp[[1]] %>%
+  clean_names() %>%
+  select(state_name = state_or_federal_district,
+         nominal_gdp_per_cap_2022 = nominal_gdp_per_capita_1_3,
+         nominal_gdp_per_cap_2024 = nominal_gdp_per_capita_1_3_2) %>%
+  slice(-1) %>%
+  mutate(
+    nominal_gdp_per_cap_2022 = as.numeric(gsub("[$,]", "", nominal_gdp_per_cap_2022)),
+    nominal_gdp_per_cap_2024 = as.numeric(gsub("[$,]", "", nominal_gdp_per_cap_2024))
+  ) %>%
+  mutate(nominal_gdp_per_cap_2023 = nominal_gdp_per_cap_2022 * 1.06)-> us_gdp_per_cap
+
+us_gdp_per_cap
+```
+
+```{r}
+
+url <- "https://en.wikipedia.org/wiki/List_of_U.S._states_and_territories_by_population"
+webpage <- read_html(url)
+table_us_pop <- html_table(webpage, fill = TRUE)
+
+
+```
+
+
+
+```{r}
+table_us_pop[[1]] %>%
+  clean_names() %>%
+  slice(-1) %>%
+  select(state_name = state_or_territory,
+         population = census_population_8_a) %>%
+  mutate(population = as.numeric(gsub(",", "", population))) %>%
+  filter(!is.na(population)) -> us_population
+
+us_population
+```
+
+
+```{r}
+us_gdp_per_cap %>%
+  left_join(us_population) %>%
+  filter(state_name != 'United States') %>%
+  filter(state_name !='District of Columbia') %>%
+  select(state_name, nominal_gdp_per_cap = nominal_gdp_per_cap_2023, population) -> us_gdp_pop
+
+us_gdp_pop
+```
+
+```{r}
+cor(us_gdp_pop$nominal_gdp_per_cap, us_gdp_pop$population)
+```
+
+
+
+```{r fig.height=9, fig.width=12}
+us_gdp_pop %>% 
+  # mutate(nsdp_per_capita = nsdp_per_capita/1000,
+  #        population = population/100000) %>%
+  ggplot(aes(x = nominal_gdp_per_cap, y = population)) +
+  geom_point() +
+  geom_label_repel(aes(label = state_name), max.overlaps = 30) + labs(
+    title = 'Population vs NSDP per capita for Indian States',
+    caption = 'datasignal.substack.com',
+    x = "NSDP per capita of Indian States in Thousands",
+    y = "Population of Indian states in Lakhs"
+  ) + 
+  # xlab("NSDP per capita of Indian States in Thousands") +
+  # ylab("Population of Indian states in Lakhs") +
+  theme_economist()
+```
+
+```{r}
+us_gdp_pop %>%
+  mutate(
+    rank_gdp_per_cap = dense_rank(desc(nominal_gdp_per_cap)),
+    rank_population = dense_rank(desc(population))
+  )-> us_gdp_pop
+
+india_gdp_pop %>%
+  mutate(rank_gdp_per_cap = dense_rank(desc(nsdp_per_capita)),
+        rank_population = dense_rank(desc(population)))-> india_gdp_pop
+```
+
+```{r}
+us_gdp_pop %>%
+  arrange(desc(population)) %>%
+  mutate(cum_perc = 100*cumsum(population)/sum(population))
+
+
+india_gdp_pop %>%
+  arrange(desc(population)) %>%
+  mutate(cum_perc = 100*cumsum(population)/sum(population))
+```
+
+
+
+```{r}
+us_gdp_pop %>%
+  select(state_name, rank_gdp_per_cap, rank_population) %>%
+  mutate(country= "USA") %>%
+  bind_rows(
+    india_gdp_pop %>%
+      select(state_name, rank_gdp_per_cap, rank_population) %>%
+      mutate(country = "India")
+  ) %>%
+  mutate(relative_change = rank_population - rank_gdp_per_cap) %>%
+  arrange(desc(relative_change)) %>%
+  mutate(
+    change_category = case_when(
+      relative_change >= 0 & relative_change <= 10 ~ "0-10",
+      relative_change > 10 & relative_change <= 20 ~ "10-20",
+      relative_change > 20 ~ "Greater than 20",
+      relative_change >= -10 & relative_change < 0 ~ "-10-0",
+      relative_change >= -20 & relative_change < -10 ~ "-20 to -10",
+      relative_change < -20 ~ "Less than -20"
+    )
+  )-> rank_comp_ind_us
+```
+
+```{r}
+rank_comp_ind_us %>%
+  filter(rank_population<10) %>%
+  count(country, change_category) %>%
+  mutate(total_states = ifelse(country=='India', 30, 50)) %>%
+  mutate(perc = (100 * n)/total_states) %>%
+  mutate(change_category = factor(change_category, levels = c("Less than -20", "-20 to -10", "-10-0", "0-10", "10-20", "Greater than 20"))) %>%
+  ggplot(aes(x = change_category, y = perc, fill = country)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~country) +
+  labs(
+    title = "Percentage Distribution of Change Categories",
+    x = "Change Category",
+    y = "Percentage"
+  ) +
+  theme_minimal()
+  
+```
+
+
+
+```{r}
+rank_comp_ind_us %>%
+  ggplot() + geom_density(aes(x=relative_change)) + facet_wrap(~country)
+```
+```{r}
+write.csv(us_gdp_pop, 'us_gdp_pop.csv')
+write.csv(india_gdp_pop, 'india_gdp_pop.csv')
+```
+
+
+
